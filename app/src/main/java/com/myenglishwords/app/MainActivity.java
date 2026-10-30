@@ -17,6 +17,8 @@ public class MainActivity extends Activity {
     private static final int FILE_REQUEST = 101;
     private static final int BACKUP_REQUEST = 102;
     private String pendingBackup;
+    private String pendingName = "my-english-words-backup.json";
+    private String pendingMime = "application/json";
     @Override public void onCreate(Bundle state) {
         super.onCreate(state);
         tts = new TextToSpeech(this, status -> { if(status == TextToSpeech.SUCCESS) {tts.setLanguage(Locale.UK); tts.setSpeechRate(0.85f);} });
@@ -31,19 +33,28 @@ public class MainActivity extends Activity {
                 uploadCallback = callback;
                 Intent i = new Intent(Intent.ACTION_OPEN_DOCUMENT);
                 i.addCategory(Intent.CATEGORY_OPENABLE);
-                i.setType("application/json");
+                i.setType("*/*");
+                i.putExtra(Intent.EXTRA_MIME_TYPES, new String[]{"application/json", "text/plain", "text/csv", "application/vnd.ms-excel", "application/vnd.openxmlformats-officedocument.spreadsheetml.sheet"});
                 startActivityForResult(i, FILE_REQUEST);
                 return true;
             }
         });
         web.addJavascriptInterface(new Object() {
             @JavascriptInterface public void speak(String text) { runOnUiThread(() -> { if(tts != null) tts.speak(text, TextToSpeech.QUEUE_FLUSH, null, "word"); }); }
-            @JavascriptInterface public void saveBackup(String json) { runOnUiThread(() -> {
-                pendingBackup=json;
+            @JavascriptInterface public void saveFile(String filename, String mime, String content) { runOnUiThread(() -> {
+                pendingBackup=content; pendingName=filename; pendingMime=mime;
                 Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT);
                 i.addCategory(Intent.CATEGORY_OPENABLE);
-                i.setType("application/json");
-                i.putExtra(Intent.EXTRA_TITLE,"my-english-words-backup.json");
+                i.setType(mime);
+                i.putExtra(Intent.EXTRA_TITLE,filename);
+                startActivityForResult(i,BACKUP_REQUEST);
+            }); }
+            @JavascriptInterface public void saveBackup(String json) { runOnUiThread(() -> {
+                pendingBackup=json; pendingName="my-english-words-backup.json"; pendingMime="application/json";
+                Intent i=new Intent(Intent.ACTION_CREATE_DOCUMENT);
+                i.addCategory(Intent.CATEGORY_OPENABLE);
+                i.setType(pendingMime);
+                i.putExtra(Intent.EXTRA_TITLE,pendingName);
                 startActivityForResult(i,BACKUP_REQUEST);
             }); }
         }, "AndroidApp");
