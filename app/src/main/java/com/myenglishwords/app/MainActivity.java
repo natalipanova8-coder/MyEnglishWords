@@ -12,7 +12,7 @@ import java.util.Locale;
 import com.google.mlkit.vision.common.InputImage;
 import com.google.mlkit.vision.text.TextRecognition;
 import com.google.mlkit.vision.text.latin.TextRecognizerOptions;
-import com.google.mlkit.vision.text.cyrillic.CyrillicTextRecognizerOptions;
+
 import com.google.mlkit.nl.translate.Translator;
 import com.google.mlkit.nl.translate.Translation;
 import com.google.mlkit.nl.translate.TranslatorOptions;
