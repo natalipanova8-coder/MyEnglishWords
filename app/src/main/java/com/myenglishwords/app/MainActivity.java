@@ -103,32 +103,28 @@ public class MainActivity extends Activity {
     private void jsCall(String name, String arg) {
         runOnUiThread(() -> web.evaluateJavascript(name + "(" + JSONObject.quote(arg) + ")", null));
     }
-    private void scanImage(Uri uri) {
-        jsCall("ocrStatus", "Розпізнаю текст на зображенні…");
-        try {
-            InputImage image = InputImage.fromFilePath(this, uri);
-            // Both recognizers help with bilingual screenshots.
-            final String[] results = new String[2];
-            final int[] finished = {0};
-            Runnable complete = () -> {
-                finished[0]++;
-                if(finished[0]==2) {
-                    String latin = results[0]==null ? "" : results[0];
-                    String cyrillic = results[1]==null ? "" : results[1];
-                    // Keep Latin layout as the primary text; allow the user to correct it.
-                    jsCall("ocrResult", latin.isEmpty() ? cyrillic : latin);
-                }
-            };
-            var latin = TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
-            var cyr = TextRecognition.getClient(new CyrillicTextRecognizerOptions.Builder().build());
-            latin.process(image).addOnSuccessListener(t -> {results[0]=t.getText();complete.run();})
-                    .addOnFailureListener(e -> {results[0]="";complete.run();})
-                    .addOnCompleteListener(t -> latin.close());
-            cyr.process(image).addOnSuccessListener(t -> {results[1]=t.getText();complete.run();})
-                    .addOnFailureListener(e -> {results[1]="";complete.run();})
-                    .addOnCompleteListener(t -> cyr.close());
-        } catch(Exception e) {jsCall("ocrError", "Не вдалося прочитати зображення: " + e.getMessage());}
+    
+private void scanImage(Uri uri) {
+    jsCall("ocrStatus", "Розпізнаю текст на зображенні...");
+    try {
+        InputImage image = InputImage.fromFilePath(this, uri);
+
+        com.google.mlkit.vision.text.TextRecognizer recognizer =
+            TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
+
+        recognizer.process(image)
+            .addOnSuccessListener(result -> {
+                jsCall("ocrResult", result.getText());
+            })
+            .addOnFailureListener(e -> {
+                jsCall("ocrError", "Не вдалося прочитати зображення: " + e.getMessage());
+            })
+            .addOnCompleteListener(task -> recognizer.close());
+
+    } catch (Exception e) {
+        jsCall("ocrError", "Не вдалося прочитати зображення: " + e.getMessage());
     }
+}
     private void translateBatch(String json) {
         try {
             JSONArray words = new JSONArray(json);
