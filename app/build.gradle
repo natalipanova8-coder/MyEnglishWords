@@ -5,6 +5,6 @@ android { namespace 'com.myenglishwords.app'; compileSdk 35
 // On-device text recognition and on-demand English → Ukrainian translation
 dependencies {
     implementation 'com.google.mlkit:text-recognition:16.0.1'
-    implementation 'com.google.mlkit:text-recognition-cyrillic:16.0.1-beta1'
+   
     implementation 'com.google.mlkit:translate:17.0.3'
 }
