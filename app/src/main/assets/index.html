@@ -80,7 +80,7 @@ function prepareOcrRows(){
   if(lines.length>100){ocrError('За один раз можна обробити до 100 рядків.');return}
   const mode=document.getElementById('ocrMode').value;
   if(mode==='pairs'){
-    ocrPairs=lines.map(line=>{let m=line.match(/^(.+?)\s+[—–-]\s+(.+)$/);let parts=m?[m[1],m[2]]:line.split(/\t|;/);return {en:(parts[0]||'').trim(),uk:(parts[1]||'').trim()}});
+    ocrPairs=lines.map(line=>{let m=line.match(/^(.+?)\s*[—–-]\s*(.+)$/);let parts=m?[m[1],m[2]]:line.split(/\t|;/);return {en:(parts[0]||'').trim(),uk:(parts[1]||'').trim()}});
     renderOcrRows();ocrStatus('Перевір пари слів. Неповні рядки можна виправити.');
   }else{
     ocrPairs=lines.map(en=>({en,uk:''}));
@@ -104,9 +104,14 @@ function renderOcrRows(){
 function saveOcrRows(){
   let rows=ocrPairs.map((_,i)=>({selected:document.getElementById('ocrCheck'+i).checked,en:document.getElementById('ocrEn'+i).value.trim(),uk:document.getElementById('ocrUk'+i).value.trim()})).filter(r=>r.selected);
   if(!rows.length){ocrError('Не вибрано жодного рядка');return}
-  if(rows.some(r=>!r.en||!r.uk)){ocrError('Заповни англійське слово та переклад у всіх вибраних рядках');return}
-  mergeWordRows(rows);ocrStatus('Імпорт завершено. Перевір результат вище.');
-  document.getElementById('ocrPreview').classList.add('hidden');
+  if(rows.some(r=>!r.en||!r.uk)){const msg='Не додано: заповни англійське слово та український переклад у всіх позначених рядках.';ocrError(msg);alert(msg);return}
+  try {
+    const before=words.length;
+    const added=mergeWordRows(rows);
+    const msg=added>0?'Успішно додано '+added+' слів. Усього у словнику: '+words.length+'.':'Нових слів не додано: ці слова вже є у словнику або рядки некоректні.';
+    ocrStatus(msg);alert(msg);
+    if(added>0){document.getElementById('ocrPreview').classList.add('hidden');document.getElementById('ocrText').value='';}
+  } catch(err){const msg='Помилка збереження слів: '+(err?.message||err);ocrError(msg);alert(msg)}
 }
 const GRAMMAR_KEY='my_english_grammar_v3';let grammarTopics=[];try{grammarTopics=JSON.parse(localStorage.getItem(GRAMMAR_KEY))||[]}catch(e){}if(!Array.isArray(grammarTopics))grammarTopics=[];
 function saveGrammar(){localStorage.setItem(GRAMMAR_KEY,JSON.stringify(grammarTopics))}
