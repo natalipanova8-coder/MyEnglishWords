@@ -154,7 +154,7 @@ private void scanImage(Uri uri) {
         } catch (Exception e) {
             jsCall("ocrError", "Помилка розпізнавання: " + e.getMessage());
         } finally {
-            tess.end();
+            tess.recycle();
             if (bitmap != null) bitmap.recycle();
         }
     });
