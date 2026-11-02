@@ -8,6 +8,14 @@ import android.speech.tts.TextToSpeech;
 import android.webkit.*;
 import android.widget.Toast;
 import android.util.Base64;
+import android.graphics.Bitmap;
+import android.graphics.BitmapFactory;
+import com.googlecode.tesseract.android.TessBaseAPI;
+import java.io.File;
+import java.io.InputStream;
+import java.io.FileOutputStream;
+import java.util.concurrent.Executors;
+import java.util.concurrent.ExecutorService;
 import java.util.Locale;
 import com.google.mlkit.vision.common.InputImage;
 import com.google.mlkit.vision.text.TextRecognition;
@@ -30,6 +38,7 @@ public class MainActivity extends Activity {
     private static final int BACKUP_REQUEST = 102;
     private static final int IMAGE_REQUEST = 103;
     private Translator translator;
+    private final ExecutorService ocrWorker = Executors.newSingleThreadExecutor();
     private String pendingBackup;
     private String pendingName = "my-english-words-backup.json";
     private String pendingMime = "application/json";
@@ -104,26 +113,54 @@ public class MainActivity extends Activity {
         runOnUiThread(() -> web.evaluateJavascript(name + "(" + JSONObject.quote(arg) + ")", null));
     }
     
-private void scanImage(Uri uri) {
-    jsCall("ocrStatus", "Розпізнаю текст на зображенні...");
-    try {
-        InputImage image = InputImage.fromFilePath(this, uri);
-
-        com.google.mlkit.vision.text.TextRecognizer recognizer =
-            TextRecognition.getClient(TextRecognizerOptions.DEFAULT_OPTIONS);
-
-        recognizer.process(image)
-            .addOnSuccessListener(result -> {
-                jsCall("ocrResult", result.getText());
-            })
-            .addOnFailureListener(e -> {
-                jsCall("ocrError", "Не вдалося прочитати зображення: " + e.getMessage());
-            })
-            .addOnCompleteListener(task -> recognizer.close());
-
-    } catch (Exception e) {
-        jsCall("ocrError", "Не вдалося прочитати зображення: " + e.getMessage());
+private void ensureOcrModels() throws Exception {
+    File dir = new File(getFilesDir(), "tesseract/tessdata");
+    if (!dir.exists() && !dir.mkdirs()) throw new Exception("Не вдалося створити папку OCR");
+    for (String lang : new String[]{"ukr", "eng"}) {
+        File target = new File(dir, lang + ".traineddata");
+        if (target.exists() && target.length() > 100000) continue;
+        try (InputStream in = getAssets().open("tessdata/" + lang + ".traineddata");
+             FileOutputStream out = new FileOutputStream(target)) {
+            byte[] buffer = new byte[32768]; int n;
+            while ((n = in.read(buffer)) != -1) out.write(buffer, 0, n);
+        }
     }
+}
+private void scanImage(Uri uri) {
+    jsCall("ocrStatus", "Розпізнаю український та англійський текст…");
+    ocrWorker.execute(() -> {
+        TessBaseAPI tess = new TessBaseAPI();
+        Bitmap bitmap = null;
+        try {
+            ensureOcrModels();
+            BitmapFactory.Options options = new BitmapFactory.Options();
+            options.inJustDecodeBounds = true;
+            try (InputStream stream = getContentResolver().openInputStream(uri)) {
+                BitmapFactory.decodeStream(stream, null, options);
+            }
+            int maxSide = Math.max(options.outWidth, options.outHeight);
+            options.inSampleSize = 1;
+            while (maxSide / options.inSampleSize > 2400) options.inSampleSize *= 2;
+            options.inJustDecodeBounds = false;
+            try (InputStream stream = getContentResolver().openInputStream(uri)) {
+                bitmap = BitmapFactory.decodeStream(stream, null, options);
+            }
+            if (bitmap == null) throw new Exception("Зображення не відкривається");
+            if (!tess.init(new File(getFilesDir(), "tesseract").getAbsolutePath(), "ukr+eng"))
+                throw new Exception("Не вдалося запустити українську модель OCR");
+            tess.setPageSegMode(TessBaseAPI.PageSegMode.PSM_AUTO);
+            tess.setImage(bitmap);
+            String text = tess.getUTF8Text();
+            if (text == null || text.trim().isEmpty())
+                jsCall("ocrError", "Текст не знайдено. Спробуй чіткіший скриншот.");
+            else jsCall("ocrResult", text);
+        } catch (Exception e) {
+            jsCall("ocrError", "Помилка розпізнавання: " + e.getMessage());
+        } finally {
+            tess.end();
+            if (bitmap != null) bitmap.recycle();
+        }
+    });
 }
     private void translateBatch(String json) {
         try {
@@ -149,5 +186,5 @@ private void scanImage(Uri uri) {
     @Override public void onBackPressed() {
         if(web.canGoBack()) web.goBack(); else super.onBackPressed();
     }
-    @Override protected void onDestroy() { if(tts!=null) {tts.stop();tts.shutdown();} if(translator!=null)translator.close(); web.destroy(); super.onDestroy(); }
+    @Override protected void onDestroy() { if(tts!=null) {tts.stop();tts.shutdown();} if(translator!=null)translator.close(); ocrWorker.shutdown(); web.destroy(); super.onDestroy(); }
 }
